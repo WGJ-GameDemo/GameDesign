@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
 
 
@@ -7,6 +8,7 @@ public class EnemyController : MonoBehaviour
 {
     public enum EnemyType { RegularMonster, FlyingMonster }
     public EnemyType enemyType = EnemyType.RegularMonster;
+    private Rigidbody2D rb;
 
     [Header("Basic Settings")]
     public float patrolSpeed = 2f;
@@ -41,8 +43,25 @@ public class EnemyController : MonoBehaviour
     private enum State { Idle, Patrol, Chase, Attack }
     private State currentState = State.Idle;
 
+    private Vector3 startPosition;
+    private int patrolStep = 0;
+
     void Start()
     {
+        rb = GetComponent<Rigidbody2D>();
+
+        startPosition = transform.position;
+        patrolStep = 0;
+
+        if (enemyType == EnemyType.FlyingMonster)
+        {
+            rb.gravityScale = 0f;
+        }
+        else
+        {
+            rb.gravityScale = 1f;
+        }
+
         if (pointA != null) targetPoint = pointA.position;
         player = GameObject.FindGameObjectWithTag("Player")?.transform;
         if (player != null)
@@ -58,21 +77,28 @@ public class EnemyController : MonoBehaviour
 
     void Update()
     {
-        if (isDead || player == null) return;
+        if (isDead) return;
 
-        float distanceToPlayer = Vector2.Distance(transform.position, player.position);
-
-        if (distanceToPlayer <= attackRange)
+        if (player == null)
         {
-            currentState = State.Attack;
-        }
-        else if (distanceToPlayer <= detectionRange)
-        {
-            currentState = State.Chase;
+            currentState = State.Patrol;
         }
         else
         {
-            currentState = State.Patrol;
+            float distanceToPlayer = Vector2.Distance(transform.position, player.position);
+
+            if (distanceToPlayer <= attackRange)
+            {
+                currentState = State.Attack;
+            }
+            else if (distanceToPlayer <= detectionRange)
+            {
+                currentState = State.Chase;
+            }
+            else
+            {
+                currentState = State.Patrol;
+            }
         }
 
         switch (currentState)
@@ -96,20 +122,41 @@ public class EnemyController : MonoBehaviour
                 new Vector2(targetPoint.x, transform.position.y),
                 patrolSpeed * Time.deltaTime
             );
+
+            if (Vector2.Distance(transform.position, targetPoint) < 0.1f)
+            {
+                targetPoint = (targetPoint == pointA.position) ? pointB.position : pointA.position;
+                Flip();
+            }
         }
         else if (enemyType == EnemyType.FlyingMonster)
         {
-            transform.position = Vector2.MoveTowards(
-                transform.position,
-                targetPoint,
-                patrolSpeed * Time.deltaTime
-            );
-        }
+            Vector3 originPoint = startPosition; 
+            Vector3 targetPos = originPoint; 
 
-        if (Vector2.Distance(transform.position, targetPoint) < 0.1f)
-        {
-            targetPoint = (targetPoint == pointA.position) ? pointB.position : pointA.position;
-            Flip();
+            switch (patrolStep)
+            {
+                case 0:
+                    targetPos = pointA.position;
+                    break;
+                case 1:
+                    targetPos = originPoint;
+                    break;
+                case 2:
+                    targetPos = pointB.position;
+                    break;
+                case 3:
+                    targetPos = originPoint;
+                    break;
+            }
+
+            transform.position = Vector2.MoveTowards(transform.position, targetPos, patrolSpeed * Time.deltaTime);
+
+            if (Vector2.Distance(transform.position, targetPos) < 0.1f)
+            {
+                patrolStep = (patrolStep + 1) % 4;
+                Flip();
+            }
         }
     }
 
